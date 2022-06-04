@@ -3,7 +3,7 @@
 #### BIO模型【同步阻塞IO】
 BIO是传统I/O模型，一个客户端连接对应一个处理线程。在BIO中，accept和read方法都是阻塞操作，如果没有连接请求，accept方法阻塞；如果无数据可读取，read方法阻塞。
 
-![BIO模型](./image/BIO.png)
+![BIO模型](./image/BIO.png width=60%)
 
 ```java
 public void start() {
