@@ -83,7 +83,15 @@ Java NIO 由以下几个核心部分组成：
 - Channel：用于进行数据传输，面向缓冲区进行操作，支持双向传输，数据可以从Channel读取到Buffer中，也可以从Buffer写到Channel中。
 - Selector：选择器，当向一个Selector中注册Channel后，Selector 内部的机制就可以自动不断地查询（Select）这些注册的Channel是否有已就绪的 I/O 事件（例如可读，可写，网络连接完成等），这样程序就可以很简单地使用一个线程高效地管理多个Channel，也可以说管理多个网络连接，因此，Selector也被称为多路复用器。当某个Channel上面发生了读或者写事件，这个Channel就处于就绪状态，会被Selector监听到，然后通过SelectionKeys可以获取就绪Channel的集合，进行后续的I/O操作。
   
-#### Reactor模型 -- 单Reactor单线程
+#### Reactor模型 -- 单线程模型 (单Reactor单线程)
+
+Reactor内部通过Selector监控连接事件，收到事件后通过dispatch进行分发，如果是连接建立的事件，则由Acceptor处理，Acceptor通过accept接受连接，并创建一个Handler来处理连接后续的各种事件，如果是读写事件，直接调用连接对应的Handler来处理。
+
+Handler完成read -> (decode -> compute -> encode) ->send的业务流程。
+
+这种模型好处是简单，坏处却很明显，`当某个Handler阻塞时，会导致其他客户端的handler和accpetor都得不到执行`，无法做到高性能，只适用于业务处理非常快速的场景，如redis读写操作。
+
+![单Reactor单线程模型](./image/reactor-1.png)
 
 ```java
 /**
@@ -176,18 +184,15 @@ public class SingleReactor implements Runnable {
 }
 ```
 
-Reactor内部通过Selector监控连接事件，收到事件后通过dispatch进行分发，如果是连接建立的事件，则由Acceptor处理，Acceptor通过accept接受连接，并创建一个Handler来处理连接后续的各种事件，如果是读写事件，直接调用连接对应的Handler来处理。
+#### Reactor模型 -- 多线程模型 (单Reactor多线程)
 
-Handler完成read -> (decode -> compute -> encode) ->send的业务流程。
+![单Reactor多线程模型](./image/reactor-2.png)
 
-这种模型好处是简单，坏处却很明显，当某个Handler阻塞时，会导致其他客户端的handler和accpetor都得不到执行，无法做到高性能，只适用于业务处理非常快速的场景，如redis读写操作。
+主线程中，Reactor对象通过Selector监控连接事件,收到事件后通过dispatch进行分发，如果是连接建立事件，则由Acceptor处理，Acceptor通过accept接收连接，并创建一个Handler来处理后续事件，而Handler只负责响应事件，不进行业务操作，也就是只进行read读取数据和write写出数据，业务处理交给一个线程池进行处理。
 
+线程池分配一个线程完成真正的业务处理，然后将响应结果交给主进程的Handler处理，Handler将结果send给client。
 
-### AIO【NIO 2.0 异步非阻塞】
-
-![NIO模型](./image/AIO.png)
-
-AIO是异步非阻塞模型，一般用于连接数较多且连接时间较长的应用，在读写事件完成后由回调服务去通知程序启动线程进行处理。与NIO不同，当进行读写操作时，只需直接调用read或write方法即可。这两种方法均为异步的，对于读操作而言，当有流可读取时，操作系统会将可读的流传入read方法的缓冲区，并通知应用程序；对于写操作而言，当操作系统将write方法传递的流写入完毕时，操作系统主动通知应用程序。可以理解为，read/write方法都是异步的，完成后会主动调用回调函数。
+单Reactor承担所有事件的监听和响应，而当我们的服务端遇到大量的客户端同时进行连接，或者在请求连接时执行一些耗时操作，比如身份认证，权限检查等，这种瞬时的高并发就容易成为性能瓶颈。
 
 ```java
 /**
@@ -334,6 +339,28 @@ public class MultiReactor {
 
 }
 ```
+
+#### 主从多线程模型 (多Reactor多线程)
+
+![多Reactor多线程模型](./image/reactor-3.png)
+
+存在多个Reactor，每个Reactor都有自己的Selector选择器，线程和dispatch。
+
+主线程中的mainReactor通过自己的Selector监控连接建立事件，收到事件后通过Accpetor接收，将新的连接分配给某个子线程。
+
+子线程中的subReactor将mainReactor分配的连接加入连接队列中通过自己的Selector进行监听，并创建一个Handler用于处理后续事件。
+
+Handler完成read -> 业务处理 -> send的完整业务流程。
+
+
+
+
+### AIO【NIO 2.0 异步非阻塞】
+
+![NIO模型](./image/AIO.png)
+
+AIO是异步非阻塞模型，一般用于连接数较多且连接时间较长的应用，在读写事件完成后由回调服务去通知程序启动线程进行处理。与NIO不同，当进行读写操作时，只需直接调用read或write方法即可。这两种方法均为异步的，对于读操作而言，当有流可读取时，操作系统会将可读的流传入read方法的缓冲区，并通知应用程序；对于写操作而言，当操作系统将write方法传递的流写入完毕时，操作系统主动通知应用程序。可以理解为，read/write方法都是异步的，完成后会主动调用回调函数。
+
 
 [参考链接1](https://developer.aliyun.com/article/769813)
 
