@@ -3,7 +3,7 @@
 #### BIO模型【同步阻塞IO】
 BIO是传统I/O模型，一个客户端连接对应一个处理线程。在BIO中，accept和read方法都是阻塞操作，如果没有连接请求，accept方法阻塞；如果无数据可读取，read方法阻塞。
 
-![BIO模型](./image/BIO.png width=50%)
+![BIO模型](./image/BIO.png)
 
 ```java
 public void start() {
@@ -69,7 +69,7 @@ public void start() {
 
 #### NIO模型【同步非阻塞模型】
 
-![NIO模型](./image/NIO.png width=50%)
+![NIO模型](./image/NIO.png)
 
 "阻塞I/O+线程池"网络模型虽然比"阻塞I/O+多线程"网络模型在性能方面有提升，但这两种模型都存在一个共同的问题：读和写操作都是同步阻塞的,面对大并发（持续大量连接同时请求）的场景，需要消耗大量的线程来维持连接。CPU 在大量的线程之间频繁切换，性能损耗很大。一旦单机的连接超过1万，甚至达到几万的时候，服务器的性能会急剧下降。
 
@@ -91,7 +91,7 @@ Handler完成read -> (decode -> compute -> encode) ->send的业务流程。
 
 这种模型好处是简单，坏处却很明显，`当某个Handler阻塞时，会导致其他客户端的handler和accpetor都得不到执行`，无法做到高性能，只适用于业务处理非常快速的场景，如redis读写操作。
 
-![单Reactor单线程模型](./image/reactor-1.png width=50%)
+![单Reactor单线程模型](./image/reactor-1.png)
 
 ```java
 /**
@@ -186,7 +186,7 @@ public class SingleReactor implements Runnable {
 
 #### Reactor模型 -- 多线程模型 (单Reactor多线程)
 
-![单Reactor多线程模型](./image/reactor-2.png width=50%)
+![单Reactor多线程模型](./image/reactor-2.png)
 
 主线程中，Reactor对象通过Selector监控连接事件,收到事件后通过dispatch进行分发，如果是连接建立事件，则由Acceptor处理，Acceptor通过accept接收连接，并创建一个Handler来处理后续事件，而Handler只负责响应事件，不进行业务操作，也就是只进行read读取数据和write写出数据，业务处理交给一个线程池进行处理。
 
@@ -342,7 +342,7 @@ public class MultiReactor {
 
 #### 主从多线程模型 (多Reactor多线程)
 
-![多Reactor多线程模型](./image/reactor-3.png width=50%)
+![多Reactor多线程模型](./image/reactor-3.png)
 
 存在多个Reactor，每个Reactor都有自己的Selector选择器，线程和dispatch。
 
