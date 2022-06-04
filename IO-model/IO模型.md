@@ -83,7 +83,7 @@ Java NIO 由以下几个核心部分组成：
 - Channel：用于进行数据传输，面向缓冲区进行操作，支持双向传输，数据可以从Channel读取到Buffer中，也可以从Buffer写到Channel中。
 - Selector：选择器，当向一个Selector中注册Channel后，Selector 内部的机制就可以自动不断地查询（Select）这些注册的Channel是否有已就绪的 I/O 事件（例如可读，可写，网络连接完成等），这样程序就可以很简单地使用一个线程高效地管理多个Channel，也可以说管理多个网络连接，因此，Selector也被称为多路复用器。当某个Channel上面发生了读或者写事件，这个Channel就处于就绪状态，会被Selector监听到，然后通过SelectionKeys可以获取就绪Channel的集合，进行后续的I/O操作。
   
-#### Reactor模型 -- 单线程模型 (单Reactor单线程)
+##### Reactor模型 -- 单线程模型 (单Reactor单线程)
 
 Reactor内部通过Selector监控连接事件，收到事件后通过dispatch进行分发，如果是连接建立的事件，则由Acceptor处理，Acceptor通过accept接受连接，并创建一个Handler来处理连接后续的各种事件，如果是读写事件，直接调用连接对应的Handler来处理。
 
@@ -184,7 +184,7 @@ public class SingleReactor implements Runnable {
 }
 ```
 
-#### Reactor模型 -- 多线程模型 (单Reactor多线程)
+##### Reactor模型 -- 多线程模型 (单Reactor多线程)
 
 ![单Reactor多线程模型](./image/reactor-2.png)
 
