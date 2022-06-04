@@ -1,9 +1,9 @@
-### Java I/O模型
+### I/O模型演进
 
 #### BIO模型【同步阻塞IO】
-BIO是同步阻塞模型，一个客户端连接对应一个处理线程。在BIO中，accept和read方法都是阻塞操作，如果没有连接请求，accept方法阻塞；如果无数据可读取，read方法阻塞。
+BIO是传统I/O模型，一个客户端连接对应一个处理线程。在BIO中，accept和read方法都是阻塞操作，如果没有连接请求，accept方法阻塞；如果无数据可读取，read方法阻塞。
 
-![BIO模型](./BIO.png)
+![BIO模型](./image/BIO.png)
 
 ```java
 public void start() {
@@ -69,7 +69,7 @@ public void start() {
 
 #### NIO模型【同步非阻塞模型】
 
-![NIO模型](./NIO.png)
+![NIO模型](./image/NIO.png)
 
 "阻塞I/O+线程池"网络模型虽然比"阻塞I/O+多线程"网络模型在性能方面有提升，但这两种模型都存在一个共同的问题：读和写操作都是同步阻塞的,面对大并发（持续大量连接同时请求）的场景，需要消耗大量的线程来维持连接。CPU 在大量的线程之间频繁切换，性能损耗很大。一旦单机的连接超过1万，甚至达到几万的时候，服务器的性能会急剧下降。
 
@@ -82,7 +82,107 @@ Java NIO 由以下几个核心部分组成：
 - Buffer：用于存储数据，底层基于数组实现，针对8种基本类型提供了对应的缓冲区类。
 - Channel：用于进行数据传输，面向缓冲区进行操作，支持双向传输，数据可以从Channel读取到Buffer中，也可以从Buffer写到Channel中。
 - Selector：选择器，当向一个Selector中注册Channel后，Selector 内部的机制就可以自动不断地查询（Select）这些注册的Channel是否有已就绪的 I/O 事件（例如可读，可写，网络连接完成等），这样程序就可以很简单地使用一个线程高效地管理多个Channel，也可以说管理多个网络连接，因此，Selector也被称为多路复用器。当某个Channel上面发生了读或者写事件，这个Channel就处于就绪状态，会被Selector监听到，然后通过SelectionKeys可以获取就绪Channel的集合，进行后续的I/O操作。
+  
+#### Reactor模型 -- 单Reactor单线程
 
+```java
+/**
+ * @description: 单线程 reactor 模式
+ * <p>
+ * reactor 和 handler 在一个线程里面
+ * <p>
+ * <p>
+ * #####################################
+ * reactor 模型各个组件
+ * reactor: 负责响应事件，将事件分发给绑定了该事件的handler
+ * handler: 绑定了某类事件的处理器， 负责执行对事件的处理
+ * Acceptor: 特殊的Handler， 绑定了 connect 事件， 客户端的 connect 事件会分发给 Acceptor
+ **/
+public class SingleReactor implements Runnable {
+
+    private Selector selector;
+    private ServerSocketChannel serverSocket;
+
+    public SingleReactor(int port) throws Exception {
+        selector = Selector.open();
+        serverSocket = ServerSocketChannel.open();
+        serverSocket.socket().bind(new InetSocketAddress(port));
+        // 设置成非阻塞
+        serverSocket.configureBlocking(false);
+        // 只关注 accept 事件
+        SelectionKey selectionKey = serverSocket.register(selector, SelectionKey.OP_ACCEPT);
+        // 注册 attach 对象
+        selectionKey.attach(new Acceptor());
+        System.out.println("Listen port:" + port);
+    }
+
+    @Override
+    public void run() {
+        try {
+            while (!Thread.interrupted()) {
+                selector.select(); // 阻塞至通道就绪
+                Set<SelectionKey> selectionKeys = selector.selectedKeys(); // 就绪通道 SelectionKey 集合
+                Iterator<SelectionKey> it = selectionKeys.iterator();
+                // 遍历就绪事件，分发给对应处理器
+                while (it.hasNext()) {
+                    SelectionKey selectedKey = it.next();
+                    dispatch(selectedKey);
+                }
+                // 清空就绪通道
+                selectionKeys.clear();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    void dispatch(SelectionKey k) {
+        // 获取 key 对应的处理器
+        Runnable r = (Runnable) (k.attachment());
+        if (r != null) {
+            r.run();
+        }
+    }
+
+    class Acceptor implements Runnable {
+        @Override
+        public void run() {
+            try {
+                // 接收连接，非阻塞模式没有连接直接返回null
+                SocketChannel socket = serverSocket.accept();
+                if (socket != null) {
+                    socket.write(ByteBuffer.wrap("single reactor".getBytes()));
+                    System.out.println("Accept and handler - " + socket.socket().getLocalSocketAddress());
+                    // 分发给对应的 handler
+                    new BasicHandler(selector, socket);
+                }
+            } catch (IOException ioex) {
+                ioex.printStackTrace();
+            }
+        }
+    }
+
+
+    public static void main(String[] args) {
+        try {
+            Thread th = new Thread(new SingleReactor(10393));
+            th.setName("SingleReactor");
+            th.start();
+            th.join();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+> Epoll是Linux下多路复用IO接口select/poll的增强版本，它能显著提高程序在大量并发连接中只有少量活跃的情况下的系统CPU利用率，获取事件的时候，它无须遍历整个被侦听的描述符集，只要遍历那些被内核IO事件异步唤醒而加入Ready队列的描述符集合就行了。
+
+### AIO【NIO 2.0 异步非阻塞】
+
+![NIO模型](./image/AIO.png)
+
+AIO是异步非阻塞模型，一般用于连接数较多且连接时间较长的应用，在读写事件完成后由回调服务去通知程序启动线程进行处理。与NIO不同，当进行读写操作时，只需直接调用read或write方法即可。这两种方法均为异步的，对于读操作而言，当有流可读取时，操作系统会将可读的流传入read方法的缓冲区，并通知应用程序；对于写操作而言，当操作系统将write方法传递的流写入完毕时，操作系统主动通知应用程序。可以理解为，read/write方法都是异步的，完成后会主动调用回调函数。
 
 
 [参考链接1](https://developer.aliyun.com/article/769813)
