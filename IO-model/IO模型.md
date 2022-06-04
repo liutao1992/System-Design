@@ -176,6 +176,12 @@ public class SingleReactor implements Runnable {
 }
 ```
 
+Reactor内部通过Selector监控连接事件，收到事件后通过dispatch进行分发，如果是连接建立的事件，则由Acceptor处理，Acceptor通过accept接受连接，并创建一个Handler来处理连接后续的各种事件，如果是读写事件，直接调用连接对应的Handler来处理。
+
+Handler完成read -> (decode -> compute -> encode) ->send的业务流程。
+
+这种模型好处是简单，坏处却很明显，当某个Handler阻塞时，会导致其他客户端的handler和accpetor都得不到执行，无法做到高性能，只适用于业务处理非常快速的场景，如redis读写操作。
+
 > Epoll是Linux下多路复用IO接口select/poll的增强版本，它能显著提高程序在大量并发连接中只有少量活跃的情况下的系统CPU利用率，获取事件的时候，它无须遍历整个被侦听的描述符集，只要遍历那些被内核IO事件异步唤醒而加入Ready队列的描述符集合就行了。
 
 ### AIO【NIO 2.0 异步非阻塞】
@@ -184,11 +190,9 @@ public class SingleReactor implements Runnable {
 
 AIO是异步非阻塞模型，一般用于连接数较多且连接时间较长的应用，在读写事件完成后由回调服务去通知程序启动线程进行处理。与NIO不同，当进行读写操作时，只需直接调用read或write方法即可。这两种方法均为异步的，对于读操作而言，当有流可读取时，操作系统会将可读的流传入read方法的缓冲区，并通知应用程序；对于写操作而言，当操作系统将write方法传递的流写入完毕时，操作系统主动通知应用程序。可以理解为，read/write方法都是异步的，完成后会主动调用回调函数。
 
-```
+```java
 /**
  * @description: reactor 多线程模型
- *
- *
  * 为了匹配 CPU 和 IO 的速率，可设计多个 SingleReactor（即 Selector 池）
  * 主 Reacotr 负责监听连接，然后将连接注册到从 SingleReactor，将 I/O 转移了
  * 从 Reacotr 负责通道 I/O 的读写，处理器可选择单线程或线程池
