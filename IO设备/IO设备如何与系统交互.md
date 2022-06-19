@@ -139,3 +139,6 @@ CPU通过英特尔专有DMI连接到I/O芯片，其余的设备通过许多不�
 ![code](./image/code2.png)
 ![code](./image/code3.png)
 ![code](./image/code4.png)
+
+[如何理解中断](https://mp.weixin.qq.com/s/sUfPYDe_4Dpz6cWskyZu_w)
+[中断](https://mp.weixin.qq.com/s/bTfeI5p4eO5j6I9edeV73g)
